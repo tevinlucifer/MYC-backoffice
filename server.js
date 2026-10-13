@@ -114,4 +114,88 @@ app.get('/api/dashboard', auth, (req, res) => {
   });
 });
 
+/* ---------- products, suppliers, reports, settings (sample data) ---------- */
+const P = [
+  ['1235631','Ceylon Cotton Mills','Midi denim skirt A-line','👗','28.09.2026','03.10.2026','Delivering','Cash on delivery',28780],
+  ['5235631','Denim Works','Black and white T-shirt','👕','28.09.2026','03.10.2026','Confirmed','Card',15400],
+  ['1205631','ThreadLogix','Floral summer dress','👗','29.09.2026','04.10.2026','Shipped','Cash on delivery',35600],
+  ['1235632','Ceylon Cotton Mills','Classic grey sweatshirt','🧥','30.09.2026','05.10.2026','Delivering','Card',22400],
+  ['1235633','Denim Works','Slim fit jeans','👖','01.10.2026','06.10.2026','Delivering','Card',32700],
+  ['1235634','PakTextile Co.','Oxford shirt','👔','02.10.2026','07.10.2026','Confirmed','Cash on delivery',18900],
+  ['1235635','Zip & Button Co.','Bomber jacket','🧥','03.10.2026','08.10.2026','Shipped','Card',41500],
+  ['1235636','NovaDye Industries','Cargo shorts','🩳','04.10.2026','09.10.2026','Confirmed','Card',12300]
+];
+app.get('/api/products', auth, (req, res) => res.json(P.map(([num, supplier, product, icon, ordered, delivery, status, payment, amount]) =>
+  ({ num, supplier, product, icon, ordered, delivery, status, payment, amount }))));
+
+const suppliers = [
+  { name: 'Ceylon Cotton Mills', loc: 'Colombo, Sri Lanka', status: 'Active', last: 'Oct 5, 2026' },
+  { name: 'PakTextile Co.', loc: 'Karachi, Pakistan', status: 'Inactive', last: 'Oct 6, 2026' },
+  { name: 'Denim Works', loc: 'Istanbul, Turkey', status: 'Active', last: 'Oct 12, 2026' },
+  { name: 'ThreadLogix', loc: 'Berlin, Germany', status: 'Pending', last: 'Sep 30, 2026' },
+  { name: 'Zip & Button Co.', loc: 'Tirupur, India', status: 'Active', last: 'Oct 6, 2026' },
+  { name: 'NovaDye Industries', loc: 'Dhaka, Bangladesh', status: 'Active', last: 'Oct 6, 2026' }
+];
+app.get('/api/suppliers', auth, (req, res) => res.json({
+  suppliers,
+  chats: [
+    { name: 'Ceylon Cotton Mills', msg: 'Sent a message', time: '12:55 pm' },
+    { name: 'ThreadLogix', msg: 'Sent a photo', time: '12:55 pm' },
+    { name: 'Denim Works', msg: 'Sent a message', time: '12:40 pm' }
+  ],
+  activity: [
+    { who: 'Nimal Perera', what: 'accepted new deals', when: 'Today, 10:24 AM' },
+    { who: 'AI', what: 'suggested restocking 3 low-stock products', when: 'Today, 09:18 AM' },
+    { who: 'Emily Zhang', what: 'updated documents for supplier deals', when: 'Today, 10:24 AM' }
+  ]
+}));
+app.post('/api/suppliers', auth, (req, res) => {
+  const s = { name: String(req.body.name || '').slice(0, 80), loc: String(req.body.loc || '').slice(0, 80), status: 'Pending', last: '-' };
+  if (!s.name) return res.status(400).json({ error: 'Enter a supplier name.' });
+  suppliers.unshift(s);
+  res.json(s);
+});
+
+const by = ['Martin Bats', 'John Li', 'Jacob Jones', 'Gloria Rich', 'Albert Flores', 'Ronald Richards'];
+let reports = [
+  ['Inventory Report', 'Custom', 'Report October 2026', '13.10.2026'],
+  ['Workflow Report', 'Template', 'Workflow report', '12.10.2026'],
+  ['Monthly Report', 'Template', 'Monthly report September 2026', '10.10.2026'],
+  ['Wholesalers Report', 'Custom', 'Wholesalers report September 2026', '08.10.2026'],
+  ['Competitor Analytics', 'Template', 'Analytics of the index of competitors', '05.10.2026'],
+  ['Workflow Estimation', 'Custom', '-', '03.10.2026'],
+  ['Quarterly Report', 'Custom', 'Quarterly report Q3 2026', '01.10.2026'],
+  ['Weekly Report', 'Template', 'Weekly report 1-7 Oct 2026', '30.09.2026'],
+  ['Inventory Report', 'Custom', '-', '24.09.2026'],
+  ['Inventory Report', 'Custom', 'Inventory report 2026', '18.09.2026'],
+  ['Returns Report', 'Custom', 'Returns and exchanges', '10.09.2026'],
+  ['Sales by Category', 'Template', 'Sales by category August 2026', '02.09.2026']
+].map(([name, type, desc, date], i) => ({ id: 'r' + i, name, type, by: by[i % by.length], desc, date }));
+app.get('/api/reports', auth, (req, res) => res.json(reports));
+app.post('/api/reports', auth, (req, res) => {
+  const name = String(req.body.name || '').slice(0, 80);
+  if (!name) return res.status(400).json({ error: 'Enter a report name.' });
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const r = { id: 'r' + Date.now(), name, type: 'Custom', by: req.user.name, desc: '-', date: `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}` };
+  reports.unshift(r);
+  res.json(r);
+});
+app.delete('/api/reports', auth, (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+  reports = reports.filter(r => !ids.includes(r.id));
+  res.json({ ok: true });
+});
+
+const ch = (push, email, sms) => ({ push, email, sms });
+const defaultSettings = () => ({ orders: ch(1, 1, 0), stock: ch(1, 0, 0), messages: ch(1, 1, 0), suppliers: ch(0, 0, 0), reports: ch(0, 1, 0) });
+app.get('/api/settings', auth, (req, res) => res.json({ ...defaultSettings(), ...(req.user.settings || {}) }));
+app.post('/api/settings', auth, (req, res) => {
+  const clean = defaultSettings();
+  for (const k in clean) for (const c in clean[k]) clean[k][c] = req.body[k] && req.body[k][c] ? 1 : 0;
+  const users = readUsers();
+  users.find(u => u.id === req.user.id).settings = clean;
+  writeUsers(users);
+  res.json(clean);
+});
+
 app.listen(PORT, () => console.log(`MYC back office running at http://localhost:${PORT}`));

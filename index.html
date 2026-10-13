@@ -82,6 +82,28 @@ td{padding:12px 10px;border-bottom:1px solid var(--line)}
 .pill.p{background:var(--soft);color:var(--or)}
 .scroll{overflow-x:auto}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--or);color:#fff;padding:10px 18px;border-radius:10px;font-weight:600}
+input[type=checkbox]{width:16px;height:16px;padding:0;accent-color:var(--or)}
+.ghost{font:inherit;color:inherit}.ghost:disabled{opacity:.45;cursor:default}
+.tabs2{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tabs2 button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:7px 16px;color:var(--mut)}
+.tabs2 button.on{background:var(--soft);color:var(--or);border-color:var(--or)}
+.sw{position:relative;width:38px;height:22px;display:inline-block;flex:none}
+.sw input[type=checkbox]{opacity:0;position:absolute;inset:0;margin:0;width:100%;height:100%;cursor:pointer;z-index:1}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:.2s}
+.sw span:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.sw input:checked+span{background:var(--or)}.sw input:checked+span:before{transform:translateX(16px)}
+.thumb{width:40px;height:40px;border-radius:8px;place-items:center;font-size:20px;background:var(--soft)}
+.ava{width:30px;height:30px;border-radius:50%;background:var(--or);color:#fff;display:inline-grid;place-items:center;font-size:12px;font-weight:700;margin-right:8px;vertical-align:middle}
+.two{display:grid;grid-template-columns:1.9fr 1fr;gap:16px}
+.cards4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:16px}
+.tpl{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.tpl .pv{height:90px;background:var(--soft);padding:12px}.tpl .pv i{display:block;height:8px;border-radius:4px;background:var(--line);margin-bottom:8px}.tpl .pv i:first-child{background:var(--or);width:60%}
+.tpl .ft{padding:10px 12px}
+.pg{display:flex;gap:6px;justify-content:center;margin-top:14px}.pg button.on{background:var(--or);color:#fff;border-color:var(--or)}
+.ib{border:0;background:none;color:var(--mut);font-size:18px}
+tr.sel{background:var(--soft)}
+.pill.b{background:rgba(70,130,230,.15);color:#5b95f0}.pill.y{background:rgba(240,170,30,.17);color:#e0a010}
+@media(max-width:960px){.two{grid-template-columns:1fr}}
 @media(max-width:960px){
 #auth{grid-template-columns:1fr}.hero{display:none}
 #app{grid-template-columns:1fr}
@@ -123,18 +145,19 @@ main{padding:18px 14px}}
   <aside id="side">
     <div class="brand"><span class="lg"><img src="myc-logo.jpeg" alt=""></span><div><b>MYC 1989</b><span class="muted">Back office</span></div></div>
     <div class="grp">Sales &amp; insights</div>
-    <button class="nav on"><i>▦</i>Dashboard</button>
+    <button class="nav on" data-p="dashboard"><i>▦</i>Dashboard</button>
+    <button class="nav" data-p="reports"><i>▤</i>Reports</button>
     <div class="grp">Catalog</div>
-    <button class="nav"><i>◫</i>Products</button>
+    <button class="nav" data-p="products"><i>◫</i>Products</button>
     <button class="nav"><i>☰</i>Collections</button>
     <button class="nav"><i>%</i>Promotions</button>
     <div class="grp">Customers</div>
     <button class="nav"><i>☺</i>Clients</button>
     <button class="nav"><i>▭</i>Orders &amp; payments</button>
     <div class="grp">Operations</div>
-    <button class="nav"><i>⛟</i>Suppliers</button>
+    <button class="nav" data-p="suppliers"><i>⛟</i>Suppliers</button>
     <button class="nav"><i>✉</i>Support tickets</button>
-    <button class="nav"><i>⚙</i>Settings</button>
+    <button class="nav" data-p="settings"><i>⚙</i>Settings</button>
     <div class="me" style="margin-top:auto">
       <div class="av" id="av">M</div>
       <div style="min-width:0"><b id="uname">User</b><div class="muted" id="umail" style="overflow:hidden;text-overflow:ellipsis"></div></div>
@@ -145,7 +168,7 @@ main{padding:18px 14px}}
     <div class="top">
       <div class="row">
         <button class="ghost menu" id="menu" aria-label="Menu">☰</button>
-        <div><h2>Dashboard</h2><span class="muted">Track sales, stock and customers for MYC.</span></div>
+        <div><h2 id="ptitle">Dashboard</h2><span class="muted" id="psub">Track sales, stock and customers for MYC.</span></div>
       </div>
       <div class="row">
         <button class="ghost" data-theme-toggle aria-label="Toggle theme">◐ Theme</button>
@@ -153,6 +176,7 @@ main{padding:18px 14px}}
       </div>
     </div>
 
+    <div id="pg-dashboard">
     <div class="g g2">
       <div class="card">
         <h3>Products overview</h3><span class="muted">Updated just now</span>
@@ -178,12 +202,15 @@ main{padding:18px 14px}}
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:16px"><div class="top" style="margin-bottom:8px"><h3>Recent reports</h3><button class="ghost" onclick="go('reports')">View all</button></div><div id="rr"></div></div>
     <div class="card">
       <div class="top" style="margin-bottom:12px"><h3>Products list</h3>
         <div class="row"><input id="q" placeholder="Search products..." style="width:220px"><button class="btn" id="add">Add new product</button></div>
       </div>
       <div class="scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Promo</th></tr></thead><tbody id="rows"></tbody></table></div>
     </div>
+    </div>
+    <div id="pg-other" hidden></div>
   </main>
 </div>
 <div id="toast" hidden></div>
@@ -242,7 +269,7 @@ $('#go').onclick=submit;
 $('#out').onclick=()=>{try{localStorage.removeItem('myc-token')}catch(e){}location.reload()};
 $('#menu').onclick=()=>$('#side').classList.toggle('open');
 $('#add').onclick=()=>toast('Product form coming soon');
-$$('.nav').forEach(b=>b.onclick=()=>{if(!b.classList.contains('on'))toast(b.textContent.trim()+' page coming soon')});
+$$('.nav').forEach(b=>b.onclick=()=>b.dataset.p?go(b.dataset.p):toast(b.textContent.trim()+' page coming soon'));
 
 function enter(u){
   $('#auth').hidden=true;$('#app').hidden=false;
@@ -260,6 +287,7 @@ async function load(){
     donut(d.top);gauge(d.categories);chart(d.revenue);
     $('#rev').textContent=money(d.revenue.total);$('#revd').textContent='↑ '+d.revenue.change+'%';
     products=d.products;rows();
+    api('reports').then(x=>$('#rr').innerHTML=x.slice(0,3).map(y=>`<div class="row" style="justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)"><span><b>${y.name}</b> <span class="muted">${y.desc}</span></span><span class="pill ${y.type==='Template'?'p':'a'}">${y.type}</span></div>`).join(''));
   }catch(e){
     if(e.status===401){try{localStorage.removeItem('myc-token')}catch(x){}location.reload()}else toast(e.message)
   }
@@ -296,6 +324,54 @@ function rows(){
   $('#rows').innerHTML=products.filter(p=>(p.name+p.category+p.id).toLowerCase().includes(q)).map(p=>`<tr><td>${p.id}</td><td><b>${p.name}</b></td><td>${p.category}</td><td>Rs. ${p.price.toLocaleString()}</td><td>${p.stock}</td><td><span class="pill ${p.stock?'a':'o'}">${p.stock?'Active':'Out of stock'}</span></td><td>${p.promo?'<span class="pill p">On promotion</span>':'<span class="muted">None</span>'}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">No products match your search.</td></tr>';
 }
 $('#q').oninput=rows;
+
+/* pages */
+const titles={dashboard:'Dashboard',products:'Products',suppliers:'Suppliers',reports:'Reports',settings:'Settings'};
+const subs={dashboard:'Track sales, stock and customers for MYC.',products:'Orders and stock for every piece.',suppliers:'Manage the mills and workshops you buy from.',reports:'Create, review and clean up store reports.',settings:'Manage your account and notifications.'};
+function go(p){
+  $$('.nav').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
+  $('#pg-dashboard').hidden=p!=='dashboard';$('#pg-other').hidden=p==='dashboard';
+  $('#ptitle').textContent=titles[p];$('#psub').textContent=subs[p];$('#side').classList.remove('open');
+  if(p!=='dashboard')({products:pProducts,suppliers:pSuppliers,reports:pReports,settings:pSettings})[p]().catch(e=>toast(e.message));
+}
+async function pProducts(){
+  const d=await api('products'),S={Delivering:'b',Confirmed:'a',Shipped:'y'};
+  $('#pg-other').innerHTML=`<div class="card"><div class="top" style="margin-bottom:12px"><h3>All</h3><input id="pq" placeholder="Search products or suppliers..." style="width:240px"></div><div class="scroll"><table><thead><tr><th></th><th></th><th>Number</th><th>Supplier</th><th>Product</th><th>Ordered</th><th>Delivery</th><th>Order status</th><th>Payment</th><th>Amount</th></tr></thead><tbody id="pr"></tbody></table></div></div>`;
+  const draw=()=>{const q=$('#pq').value.toLowerCase();$('#pr').innerHTML=d.filter(r=>(r.product+r.supplier+r.num).toLowerCase().includes(q)).map(r=>`<tr><td><input type="checkbox"></td><td><button class="ib" onclick="toast('Editing coming soon')">✎</button></td><td>${r.num}</td><td>${r.supplier}</td><td><span class="thumb" style="display:inline-grid;vertical-align:middle;margin-right:10px">${r.icon}</span>${r.product}</td><td>${r.ordered}</td><td>${r.delivery}</td><td><span class="pill ${S[r.status]}">${r.status}</span></td><td>${r.payment}</td><td><b>Rs. ${r.amount.toLocaleString()}</b></td></tr>`).join('')||'<tr><td colspan="10" class="muted">No products match your search.</td></tr>'};
+  $('#pq').oninput=draw;draw();
+}
+async function pSuppliers(){
+  const d=await api('suppliers'),S={Active:'a',Inactive:'o',Pending:'y'};let tab='All';
+  $('#pg-other').innerHTML=`<div class="two"><div class="card"><div class="top" style="margin-bottom:12px"><div class="tabs2" id="st" style="margin:0">${['All','Active','Inactive','Pending'].map((t,i)=>`<button class="${i?'':'on'}">${t}</button>`).join('')}</div><button class="btn" id="sa">+ Add supplier</button></div><div class="scroll"><table><thead><tr><th>Supplier name</th><th>Status</th><th>Last order</th><th>Action</th></tr></thead><tbody id="sr"></tbody></table></div></div>
+  <div><div class="card" style="margin-bottom:16px"><h3>Quick chat</h3>${d.chats.map(c=>`<div class="row" style="padding:10px 0"><span class="ava">${c.name[0]}</span><div><b>${c.name}</b><div class="muted">${c.msg} · ${c.time}</div></div></div>`).join('')}</div><div class="card"><h3>Recent activity</h3>${d.activity.map(a=>`<p style="padding:9px 0;border-top:1px solid var(--line)"><b>${a.who}</b> ${a.what}<br><span class="muted">${a.when}</span></p>`).join('')}</div></div></div>`;
+  const draw=()=>{$('#sr').innerHTML=d.suppliers.filter(s=>tab==='All'||s.status===tab).map(s=>`<tr><td><span class="ava">${s.name[0]}</span><b>${s.name}</b><div class="muted" style="margin-left:38px">${s.loc}</div></td><td><span class="pill ${S[s.status]}">${s.status}</span></td><td>${s.last}</td><td><button class="ib" onclick="toast('Supplier options coming soon')">⋯</button></td></tr>`).join('')};
+  $$('#st button').forEach(b=>b.onclick=()=>{tab=b.textContent;$$('#st button').forEach(x=>x.classList.toggle('on',x===b));draw()});
+  $('#sa').onclick=async()=>{const name=prompt('Supplier name');if(!name)return;const loc=prompt('City, country')||'';d.suppliers.unshift(await api('suppliers',{method:'POST',body:JSON.stringify({name,loc})}));draw();toast('Supplier added')};
+  draw();
+}
+async function pReports(){
+  let d=await api('reports'),pg=1,type='All';const sel=new Set(),N=6,el=$('#pg-other');
+  const draw=()=>{
+    const f=d.filter(r=>type==='All'||r.type===type),pages=Math.max(1,Math.ceil(f.length/N));pg=Math.min(pg,pages);
+    el.innerHTML=`<div class="top" style="margin-bottom:14px"><span></span><div class="row"><button class="ghost" id="rd" ${sel.size?'':'disabled'}>🗑 Delete ${sel.size} report${sel.size==1?'':'s'}</button><select id="rt" class="ghost">${['All','Custom','Template'].map(t=>`<option ${t===type?'selected':''}>${t}</option>`).join('')}</select><button class="btn" id="ra">+ Add report</button></div></div>
+    <div class="cards4">${d.filter(r=>r.type==='Template').slice(0,4).map(r=>`<div class="tpl"><div class="pv"><i></i><i></i><i></i><i style="width:80%"></i></div><div class="ft"><b>${r.name}</b><div class="muted">Modified ${r.date}</div></div></div>`).join('')}</div>
+    <div class="card"><div class="scroll"><table><thead><tr><th></th><th>Report name</th><th>Type</th><th>Created by</th><th>Description</th><th>Date created</th></tr></thead><tbody>${f.slice((pg-1)*N,pg*N).map(r=>`<tr class="${sel.has(r.id)?'sel':''}"><td><input type="checkbox" data-id="${r.id}" ${sel.has(r.id)?'checked':''}></td><td>${r.name}</td><td>${r.type}</td><td><span class="ava">${r.by[0]}</span>${r.by}</td><td>${r.desc}</td><td>${r.date}</td></tr>`).join('')}</tbody></table></div>
+    <div class="pg">${Array.from({length:pages},(_,i)=>`<button class="ghost ${i+1===pg?'on':''}" data-pg="${i+1}">${i+1}</button>`).join('')}</div></div>`;
+    $$('[data-id]').forEach(c=>c.onchange=()=>{c.checked?sel.add(c.dataset.id):sel.delete(c.dataset.id);draw()});
+    $$('[data-pg]').forEach(b=>b.onclick=()=>{pg=+b.dataset.pg;draw()});
+    $('#rt').onchange=e=>{type=e.target.value;pg=1;draw()};
+    $('#rd').onclick=async()=>{if(!confirm('Delete '+sel.size+' selected report(s)?'))return;await api('reports',{method:'DELETE',body:JSON.stringify({ids:[...sel]})});d=d.filter(r=>!sel.has(r.id));sel.clear();draw();toast('Reports deleted')};
+    $('#ra').onclick=async()=>{const name=prompt('Report name');if(!name)return;d.unshift(await api('reports',{method:'POST',body:JSON.stringify({name})}));draw();toast('Report added')};
+  };
+  draw();
+}
+async function pSettings(){
+  const s=await api('settings');
+  const G=[['orders','Orders','New orders, payments and delivery updates.'],['stock','Low stock','Pieces that are running low or out of stock.'],['messages','Messages','Chats from suppliers and customers.'],['suppliers','Suppliers','Supplier status changes and new deals.'],['reports','Reports','When a scheduled report is ready.']];
+  $('#pg-other').innerHTML=`<div class="card"><a href="#" class="muted" onclick="go('dashboard');return false">← Back to dashboard</a><div class="tabs2" style="margin:16px 0">${['My details','Profile','Password','Team','Plan','Billing','Email','Notifications','Integrations','API'].map(t=>`<button class="${t==='Notifications'?'on':''}" data-t="${t}">${t}</button>`).join('')}</div><h3>Notification settings</h3><p class="muted" style="margin-bottom:8px">We may still send you important notices about your account outside these settings.</p>${G.map(([k,t,x])=>`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:18px 0;border-top:1px solid var(--line)"><div style="max-width:320px"><b>${t}</b><div class="muted">${x}</div></div><div style="display:grid;gap:10px;min-width:120px">${['push','email','sms'].map(c=>`<label class="row" style="margin:0;font-weight:400"><span class="sw"><input type="checkbox" data-k="${k}" data-c="${c}" ${s[k][c]?'checked':''}><span></span></span>${c==='sms'?'SMS':c[0].toUpperCase()+c.slice(1)}</label>`).join('')}</div></div>`).join('')}</div>`;
+  $$('[data-t]').forEach(b=>b.onclick=()=>b.dataset.t!=='Notifications'&&toast(b.dataset.t+' settings coming soon'));
+  $$('[data-k]').forEach(c=>c.onchange=async()=>{s[c.dataset.k][c.dataset.c]=c.checked;try{await api('settings',{method:'POST',body:JSON.stringify(s)});toast('Saved')}catch(e){toast(e.message)}});
+}
 
 /* auto sign-in if a token exists */
 if(tok()) api('me').then(d=>enter(d.user)).catch(()=>{});

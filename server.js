@@ -25,7 +25,13 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-app.use(express.static(path.join(__dirname, 'public'))); // serves index.html and myc-logo.jpeg
+// Serve the page from the "public" folder. If that folder does not exist yet, fall back to index.html + images next to server.js.
+// (Only those are public: server.js, users.json and data.json are never served.)
+if (fs.existsSync(path.join(__dirname, 'public'))) app.use(express.static(path.join(__dirname, 'public')));
+else {
+  app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+  app.use('/images', express.static(path.join(__dirname, 'images')));
+}
 
 /* ---------- users (stored in users.json) ---------- */
 let USERS = [];

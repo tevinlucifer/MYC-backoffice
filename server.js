@@ -10,7 +10,7 @@ const SECRET = process.env.JWT_SECRET || 'change-this-secret-before-going-live';
 const USERS_FILE = path.join(__dirname, 'users.json');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '4mb' }));
 // Allow the page to call the API even when opened from Live Server (port 5501)
 app.use((req, res, next) => {
   res.set({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
@@ -44,7 +44,7 @@ function readToken(t) {
   const p = JSON.parse(Buffer.from(body, 'base64url').toString());
   return p.exp > Date.now() ? p : null;
 }
-const publicUser = u => ({ id: u.id, name: u.name, email: u.email });
+const publicUser = u => ({ id: u.id, name: u.name, email: u.email, perms: permsOf(u) });
 
 function auth(req, res, next) {
   const p = readToken((req.headers.authorization || '').replace('Bearer ', ''));
@@ -61,6 +61,7 @@ app.post('/api/signup', (req, res) => {
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   const users = readUsers();
+  if (users.length) return res.status(403).json({ error: 'Sign up is closed. Ask an admin to create your account (Settings → Team).' });
   if (users.some(u => u.email === email.toLowerCase())) return res.status(409).json({ error: 'An account with this email already exists.' });
   const user = { id: crypto.randomUUID(), name, email: email.toLowerCase(), password: hash(password) };
   users.push(user);
@@ -149,9 +150,10 @@ app.get('/api/suppliers', auth, (req, res) => res.json({
     { who: 'Emily Zhang', what: 'updated documents for supplier deals', when: 'Today, 10:24 AM' }
   ]
 }));
-app.post('/api/suppliers', auth, (req, res) => {
-  const s = { name: String(req.body.name || '').slice(0, 80), loc: String(req.body.loc || '').slice(0, 80), status: 'Pending', last: '-' };
-  if (!s.name) return res.status(400).json({ error: 'Enter a supplier name.' });
+app.post('/api/suppliers', auth, can('suppliers'), (req, res) => {
+  const t = k => String(req.body[k] || '').trim().slice(0, 120);
+  const s = { name: t('company'), contact: (t('first') + ' ' + t('last')).trim(), mobile: t('mobile'), email: t('email'), loc: t('address'), status: 'Active', last: '-' };
+  if (!t('first') || !s.name) return res.status(400).json({ error: 'First name and company name are required.' });
   suppliers.unshift(s);
   res.json(s);
 });
@@ -197,5 +199,142 @@ app.post('/api/settings', auth, (req, res) => {
   writeUsers(users);
   res.json(clean);
 });
+
+/* ---------- store data, roles, team, profile, OTP, orders ---------- */
+let nodemailer = null; try { nodemailer = require('nodemailer'); } catch {}
+const MODS = ['dashboard', 'reports', 'categories', 'warehouse', 'products', 'grn', 'suppliers', 'settings'];
+const DBF = path.join(__dirname, 'data.json');
+let DB; try { DB = JSON.parse(fs.readFileSync(DBF, 'utf8')); } catch { DB = {}; }
+DB = { categories: [], warehouses: [], products: [], grns: [], roles: [], store: {}, ...DB };
+const save = () => fs.writeFileSync(DBF, JSON.stringify(DB));
+function permsOf(u) { return u.roleId ? ((DB.roles.find(r => r.id === u.roleId) || {}).perms || []) : MODS; }
+function can(m) { return (req, res, next) => permsOf(req.user).includes(m) ? next() : res.status(403).json({ error: 'You do not have access to this.' }); }
+const uid = () => 'x' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+const today = () => new Date().toISOString().slice(0, 10);
+
+const COLS = {
+  categories: ['categories', ['name', 'description'], ['name']],
+  warehouses: ['warehouse', ['name', 'location', 'contact'], ['name']],
+  products: ['products', ['code', 'name', 'categoryId', 'qty', 'cost', 'price', 'mrp', 'status', 'image'], ['code', 'name']],
+  grns: ['grn', ['supplier', 'warehouseId', 'productId', 'qty', 'cost', 'date'], ['supplier', 'productId']],
+  roles: ['settings', ['name', 'perms'], ['name']]
+};
+const NUM = ['qty', 'cost', 'price', 'mrp'];
+function pick(c, b) {
+  const o = {};
+  for (const k of COLS[c][1]) if (b[k] !== undefined) {
+    o[k] = NUM.includes(k) ? Math.max(0, Number(b[k]) || 0)
+      : k === 'perms' ? (Array.isArray(b[k]) ? b[k].filter(x => MODS.includes(x)) : [])
+      : String(b[k]).trim().slice(0, k === 'image' ? 600000 : 200);
+  }
+  return o;
+}
+const colOk = (req, res, next) => COLS[req.params.c] ? next() : res.status(404).json({ error: 'Not found' });
+const colCan = (req, res, next) => can(COLS[req.params.c][0])(req, res, next);
+app.get('/api/data/:c', auth, colOk, (req, res) => res.json(DB[req.params.c]));
+app.post('/api/data/:c', auth, colOk, colCan, (req, res) => {
+  const c = req.params.c, o = pick(c, req.body);
+  if (COLS[c][2].some(k => !o[k])) return res.status(400).json({ error: 'Please fill in the required fields.' });
+  if (c === 'products' && DB.products.some(p => p.code === o.code)) return res.status(409).json({ error: 'That product code already exists.' });
+  Object.assign(o, { id: uid() });
+  if (c === 'products') { o.created = today(); o.status = o.status || 'Active'; }
+  if (c === 'grns') {
+    o.grnNo = 'GRN-' + String(DB.grns.length + 1).padStart(4, '0');
+    const p = DB.products.find(x => x.id === o.productId);
+    if (!p) return res.status(400).json({ error: 'Choose a product.' });
+    p.qty += o.qty || 0; if (o.cost) p.cost = o.cost;
+  }
+  DB[c].unshift(o); save(); res.json(o);
+});
+app.put('/api/data/:c/:id', auth, colOk, colCan, (req, res) => {
+  const c = req.params.c, item = DB[c].find(x => x.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  const o = pick(c, req.body);
+  if (c === 'products' && o.code && DB.products.some(p => p.code === o.code && p.id !== item.id)) return res.status(409).json({ error: 'That product code already exists.' });
+  if (COLS[c][2].some(k => k in o && !o[k])) return res.status(400).json({ error: 'Please fill in the required fields.' });
+  Object.assign(item, o); save(); res.json(item);
+});
+app.delete('/api/data/:c/:id', auth, colOk, colCan, (req, res) => {
+  const c = req.params.c;
+  if (c === 'roles' && readUsers().some(u => u.roleId === req.params.id)) return res.status(409).json({ error: 'This role is assigned to users.' });
+  DB[c] = DB[c].filter(x => x.id !== req.params.id); save(); res.json({ ok: true });
+});
+
+/* team */
+const teamUser = u => ({ id: u.id, name: u.name, email: u.email, mobile: u.mobile || '', roleId: u.roleId || '' });
+app.get('/api/team', auth, (req, res) => res.json(readUsers().map(teamUser)));
+app.post('/api/team', auth, can('settings'), (req, res) => {
+  const b = req.body, t = k => String(b[k] || '').trim().slice(0, 100), email = t('email').toLowerCase();
+  if (!t('firstName') || !email || !b.password) return res.status(400).json({ error: 'First name, email and password are required.' });
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (b.password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  if (b.password !== b.confirm) return res.status(400).json({ error: 'Passwords do not match.' });
+  if (!DB.roles.some(r => r.id === b.roleId)) return res.status(400).json({ error: 'Choose a role.' });
+  const users = readUsers();
+  if (users.some(u => u.email === email)) return res.status(409).json({ error: 'A user with this email already exists.' });
+  const u = { id: crypto.randomUUID(), name: (t('firstName') + ' ' + t('lastName')).trim(), email, mobile: t('mobile'), roleId: b.roleId, password: hash(b.password) };
+  users.push(u); writeUsers(users); res.json(teamUser(u));
+});
+app.delete('/api/team/:id', auth, can('settings'), (req, res) => {
+  const users = readUsers(), u = users.find(x => x.id === req.params.id);
+  if (!u || !u.roleId || u.id === req.user.id) return res.status(400).json({ error: 'This user cannot be removed.' });
+  writeUsers(users.filter(x => x.id !== u.id)); res.json({ ok: true });
+});
+
+/* profile */
+app.get('/api/profile', auth, (req, res) => {
+  const u = req.user;
+  res.json({ me: { name: u.name, email: u.email, phone: u.phone || '', dob: u.dob || '', nic: u.nic || '' }, store: DB.store });
+});
+app.put('/api/profile', auth, (req, res) => {
+  const users = readUsers(), u = users.find(x => x.id === req.user.id), t = (v, n = 120) => String(v ?? '').trim().slice(0, n);
+  if (req.body.me) {
+    const m = req.body.me, email = t(m.email).toLowerCase();
+    if (!t(m.name) || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter your name and a valid email.' });
+    if (users.some(x => x.id !== u.id && x.email === email)) return res.status(409).json({ error: 'That email is already used.' });
+    Object.assign(u, { name: t(m.name), email, phone: t(m.phone, 30), dob: t(m.dob, 10), nic: t(m.nic, 20) });
+    writeUsers(users);
+  }
+  if (req.body.store) {
+    if (!permsOf(req.user).includes('settings')) return res.status(403).json({ error: 'You do not have access to this.' });
+    DB.store = { phone: t(req.body.store.phone, 30), email: t(req.body.store.email) }; save();
+  }
+  res.json({ user: publicUser(u), store: DB.store });
+});
+
+/* change password with an emailed OTP (set SMTP_* variables; otherwise the code prints in this terminal) */
+const otps = {};
+app.post('/api/password/otp', auth, async (req, res) => {
+  const code = String(crypto.randomInt(100000, 1000000));
+  otps[req.user.id] = { code, exp: Date.now() + 10 * 60000, tries: 0 };
+  const smtp = process.env.SMTP_HOST && nodemailer;
+  try {
+    if (smtp) {
+      const port = Number(process.env.SMTP_PORT || 465);
+      await nodemailer.createTransport({ host: process.env.SMTP_HOST, port, secure: port === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
+        .sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: req.user.email, subject: 'MYC back office password code', text: `Your code is ${code}. It expires in 10 minutes.` });
+    } else console.log(`[DEV] Password code for ${req.user.email}: ${code}`);
+    res.json({ sent: !!smtp, dev: !smtp });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Could not send the email. Check your SMTP settings.' }); }
+});
+app.post('/api/password/change', auth, (req, res) => {
+  const o = otps[req.user.id], { otp, password } = req.body;
+  if (!o || o.exp < Date.now()) return res.status(400).json({ error: 'The code expired. Request a new one.' });
+  if (++o.tries > 5) { delete otps[req.user.id]; return res.status(429).json({ error: 'Too many attempts. Request a new code.' }); }
+  if (otp !== o.code) return res.status(400).json({ error: 'Incorrect code.' });
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  const users = readUsers(); users.find(u => u.id === req.user.id).password = hash(password); writeUsers(users);
+  delete otps[req.user.id]; res.json({ ok: true });
+});
+
+/* new-order notifications: the website posts each order here with the x-api-key header */
+const orders = [];
+app.post('/api/orders/webhook', (req, res) => {
+  if (req.get('x-api-key') !== (process.env.ORDER_KEY || 'change-me-order-key')) return res.status(401).json({ error: 'Bad key' });
+  orders.push({ id: orders.length + 1, time: Date.now(), customer: String(req.body.customer || 'A customer').slice(0, 80), total: Number(req.body.total) || 0 });
+  if (orders.length > 200) orders.shift();
+  res.json({ ok: true });
+});
+app.get('/api/orders/since/:t', auth, (req, res) => res.json(orders.filter(o => o.time > Number(req.params.t))));
 
 app.listen(PORT, () => console.log(`MYC back office running at http://localhost:${PORT}`));

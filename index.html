@@ -113,6 +113,14 @@ aside.open{left:0}
 .g2,.g3{grid-template-columns:1fr}
 main{padding:18px 14px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+select{width:100%;padding:11px 12px;background:var(--card);border:1px solid var(--line);border-radius:10px;font:inherit;color:inherit}
+.subs{margin:0 0 4px 18px;border-left:1px solid var(--line);padding-left:6px}.subs.shut{display:none}
+.nav.sub{padding:8px 10px}
+.rbtn{text-align:left;color:var(--tx);cursor:pointer}.rbtn:hover{border-color:var(--or)}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:20;padding:16px}
+.mod{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;width:100%;max-width:580px;max-height:92vh;overflow:auto}
+.mb{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.mb .full{grid-column:1/-1}
+@media(max-width:600px){.mb{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -148,14 +156,20 @@ main{padding:18px 14px}}
     <button class="nav on" data-p="dashboard"><i>▦</i>Dashboard</button>
     <button class="nav" data-p="reports"><i>▤</i>Reports</button>
     <div class="grp">Catalog</div>
-    <button class="nav" data-p="products"><i>◫</i>Products</button>
+    <button class="nav" id="pgrp"><i>◫</i>Products<span style="margin-left:auto">▾</span></button>
+    <div class="subs" id="sbm">
+      <button class="nav sub" data-p="categories">Categories</button>
+      <button class="nav sub" data-p="warehouse">Warehouse</button>
+      <button class="nav sub" data-p="products">Products</button>
+      <button class="nav sub" data-p="grn">GRN</button>
+      <button class="nav sub" data-p="suppliers">Suppliers</button>
+    </div>
     <button class="nav"><i>☰</i>Collections</button>
     <button class="nav"><i>%</i>Promotions</button>
     <div class="grp">Customers</div>
     <button class="nav"><i>☺</i>Clients</button>
     <button class="nav"><i>▭</i>Orders &amp; payments</button>
     <div class="grp">Operations</div>
-    <button class="nav" data-p="suppliers"><i>⛟</i>Suppliers</button>
     <button class="nav"><i>✉</i>Support tickets</button>
     <button class="nav" data-p="settings"><i>⚙</i>Settings</button>
     <div class="me" style="margin-top:auto">
@@ -269,13 +283,15 @@ $('#go').onclick=submit;
 $('#out').onclick=()=>{try{localStorage.removeItem('myc-token')}catch(e){}location.reload()};
 $('#menu').onclick=()=>$('#side').classList.toggle('open');
 $('#add').onclick=()=>toast('Product form coming soon');
-$$('.nav').forEach(b=>b.onclick=()=>b.dataset.p?go(b.dataset.p):toast(b.textContent.trim()+' page coming soon'));
+$$('.nav').forEach(b=>b.onclick=()=>b.id==='pgrp'?$('#sbm').classList.toggle('shut'):b.dataset.p?go(b.dataset.p):toast(b.textContent.trim()+' page coming soon'));
 
 function enter(u){
   $('#auth').hidden=true;$('#app').hidden=false;
   $('#uname').textContent=u.name;$('#umail').textContent=u.email;
   $('#av').textContent=u.name[0].toUpperCase();
-  load();
+  ME=u;applyPerms();poll();
+  const f=['dashboard','reports','products','suppliers','settings'].find(can);
+  if(!f||f==='dashboard')load();else go(f);
 }
 
 /* render */
@@ -287,7 +303,7 @@ async function load(){
     donut(d.top);gauge(d.categories);chart(d.revenue);
     $('#rev').textContent=money(d.revenue.total);$('#revd').textContent='↑ '+d.revenue.change+'%';
     products=d.products;rows();
-    api('reports').then(x=>$('#rr').innerHTML=x.slice(0,3).map(y=>`<div class="row" style="justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)"><span><b>${y.name}</b> <span class="muted">${y.desc}</span></span><span class="pill ${y.type==='Template'?'p':'a'}">${y.type}</span></div>`).join(''));
+    $('#rr').innerHTML=REPORTS.slice(0,4).map(r=>`<div class="row" style="justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)"><span><b>${r[1]}</b> <span class="muted">${r[2]}</span></span><button class="ghost" onclick="go('reports');openReport('${r[0]}')">Open</button></div>`).join('');
   }catch(e){
     if(e.status===401){try{localStorage.removeItem('myc-token')}catch(x){}location.reload()}else toast(e.message)
   }
@@ -326,52 +342,187 @@ function rows(){
 $('#q').oninput=rows;
 
 /* pages */
-const titles={dashboard:'Dashboard',products:'Products',suppliers:'Suppliers',reports:'Reports',settings:'Settings'};
-const subs={dashboard:'Track sales, stock and customers for MYC.',products:'Orders and stock for every piece.',suppliers:'Manage the mills and workshops you buy from.',reports:'Create, review and clean up store reports.',settings:'Manage your account and notifications.'};
+let ME=null;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const MN={dashboard:'Dashboard',reports:'Reports',categories:'Categories',warehouse:'Warehouse',products:'Products',grn:'GRN',suppliers:'Suppliers',settings:'Settings (profile, team, roles)'};
+const can=m=>!ME||ME.perms.includes(m);
+const money2=n=>'Rs. '+Number(n||0).toLocaleString();
+const fld=(id,l,t='text',v='',x='')=>`<div><label for="${id}">${l}</label><input id="${id}" type="${t}" value="${esc(v)}" ${x}></div>`;
+const sel=(id,l,o,v,x='')=>`<div><label for="${id}">${l}</label><select id="${id}" ${x}>${o.map(([k,n])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(n)}</option>`).join('')}</select></div>`;
+function modal(t,body,ok){
+  const m=document.createElement('div');m.className='ov';
+  m.innerHTML=`<div class="mod"><h3 style="margin-bottom:12px">${t}</h3><div class="mb">${body}</div><p class="err" id="me"></p><div class="row" style="justify-content:flex-end"><button class="ghost" id="mc">Cancel</button><button class="btn" id="ms">Save</button></div></div>`;
+  document.body.append(m);
+  m.querySelector('#mc').onclick=()=>m.remove();
+  m.querySelector('#ms').onclick=async()=>{try{await ok(m);m.remove()}catch(e){m.querySelector('#me').textContent=e.message}};
+  return m;
+}
+function readImg(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.8))};i.onerror=()=>rej(new Error('That file is not an image'));i.src=r.result};r.readAsDataURL(f)})}
+function applyPerms(){
+  $$('.nav[data-p]').forEach(b=>b.hidden=!can(b.dataset.p));
+  $('#pgrp').hidden=![...$$('.sub')].some(b=>can(b.dataset.p));
+}
+const notifyOn=()=>{try{return localStorage.getItem('myc-notify')==='1'}catch(e){return false}};
+let since=Date.now(),pt;
+function poll(){clearInterval(pt);pt=setInterval(async()=>{
+  if(!notifyOn()||typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  try{(await api('orders/since/'+since)).forEach(x=>{new Notification('New order #'+x.id,{body:x.customer+' · '+money2(x.total),icon:'myc-logo.jpeg'});since=Math.max(since,x.time)})}catch(e){}
+},15000)}
+const T={dashboard:['Dashboard','Track sales, stock and customers for MYC.'],reports:['Reports','Open a report to review it or print it.'],categories:['Categories','Group your products.'],warehouse:['Warehouse','Where your stock is kept.'],products:['Products','Codes, stock and prices for every item.'],grn:['Goods received notes','Record stock arriving from suppliers.'],suppliers:['Suppliers','Manage the mills and workshops you buy from.'],settings:['Settings','Manage your account, team and notifications.']};
 function go(p){
   $$('.nav').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
   $('#pg-dashboard').hidden=p!=='dashboard';$('#pg-other').hidden=p==='dashboard';
-  $('#ptitle').textContent=titles[p];$('#psub').textContent=subs[p];$('#side').classList.remove('open');
-  if(p!=='dashboard')({products:pProducts,suppliers:pSuppliers,reports:pReports,settings:pSettings})[p]().catch(e=>toast(e.message));
+  $('#ptitle').textContent=T[p][0];$('#psub').textContent=T[p][1];$('#side').classList.remove('open');
+  if(p==='dashboard')return load();
+  if(!can(p)){$('#pg-other').innerHTML='<div class="card">You do not have access to this module.</div>';return}
+  ({reports:pReports,categories:()=>crud('categories',[['name','Category name'],['description','Description']]),warehouse:()=>crud('warehouses',[['name','Warehouse name'],['location','Location'],['contact','Contact number']]),products:pProducts,grn:pGrn,suppliers:pSuppliers,settings:()=>pSettings()})[p]().catch(e=>toast(e.message));
+}
+async function crud(col,F){
+  let d=await api('data/'+col);const el=$('#pg-other'),one=col==='categories'?'category':'warehouse';
+  const draw=()=>{
+    el.innerHTML=`<div class="card"><div class="top" style="margin-bottom:12px"><h3>All ${col}</h3><button class="btn" id="ca">+ Add ${one}</button></div><div class="scroll"><table><thead><tr>${F.map(f=>`<th>${f[1]}</th>`).join('')}<th></th></tr></thead><tbody>${d.map(r=>`<tr>${F.map(f=>`<td>${esc(r[f[0]])||'-'}</td>`).join('')}<td><button class="ib" data-e="${r.id}">✎</button><button class="ib" data-d="${r.id}">🗑</button></td></tr>`).join('')||`<tr><td class="muted" colspan="${F.length+1}">Nothing here yet.</td></tr>`}</tbody></table></div></div>`;
+    const form=r=>modal((r?'Edit ':'Add ')+one,F.map(f=>fld('f_'+f[0],f[1],'text',r&&r[f[0]])).join(''),async()=>{
+      const b={};F.forEach(f=>b[f[0]]=$('#f_'+f[0]).value.trim());
+      if(r)Object.assign(r,await api(`data/${col}/${r.id}`,{method:'PUT',body:JSON.stringify(b)}));else d.push(await api('data/'+col,{method:'POST',body:JSON.stringify(b)}));
+      draw();
+    });
+    $('#ca').onclick=()=>form();
+    $$('[data-e]').forEach(b=>b.onclick=()=>form(d.find(r=>r.id===b.dataset.e)));
+    $$('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this '+one+'?'))return;try{await api(`data/${col}/${b.dataset.d}`,{method:'DELETE'});d=d.filter(r=>r.id!==b.dataset.d);draw()}catch(e){toast(e.message)}});
+  };
+  draw();
 }
 async function pProducts(){
-  const d=await api('products'),S={Delivering:'b',Confirmed:'a',Shipped:'y'};
-  $('#pg-other').innerHTML=`<div class="card"><div class="top" style="margin-bottom:12px"><h3>All</h3><input id="pq" placeholder="Search products or suppliers..." style="width:240px"></div><div class="scroll"><table><thead><tr><th></th><th></th><th>Number</th><th>Supplier</th><th>Product</th><th>Ordered</th><th>Delivery</th><th>Order status</th><th>Payment</th><th>Amount</th></tr></thead><tbody id="pr"></tbody></table></div></div>`;
-  const draw=()=>{const q=$('#pq').value.toLowerCase();$('#pr').innerHTML=d.filter(r=>(r.product+r.supplier+r.num).toLowerCase().includes(q)).map(r=>`<tr><td><input type="checkbox"></td><td><button class="ib" onclick="toast('Editing coming soon')">✎</button></td><td>${r.num}</td><td>${r.supplier}</td><td><span class="thumb" style="display:inline-grid;vertical-align:middle;margin-right:10px">${r.icon}</span>${r.product}</td><td>${r.ordered}</td><td>${r.delivery}</td><td><span class="pill ${S[r.status]}">${r.status}</span></td><td>${r.payment}</td><td><b>Rs. ${r.amount.toLocaleString()}</b></td></tr>`).join('')||'<tr><td colspan="10" class="muted">No products match your search.</td></tr>'};
-  $('#pq').oninput=draw;draw();
+  const [d0,cats]=await Promise.all([api('data/products'),api('data/categories')]);let d=d0;
+  const cn=id=>(cats.find(c=>c.id===id)||{}).name||'-',el=$('#pg-other');
+  el.innerHTML=`<div class="card"><div class="top" style="margin-bottom:12px"><input id="pq" placeholder="Search by code or name..." style="width:260px"><button class="btn" id="pa">+ Add product</button></div><div class="scroll"><table><thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Qty</th><th>Cost price</th><th>Selling price</th><th>MRP</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="pr"></tbody></table></div></div>`;
+  const form=(r,ro)=>{
+    let img=r&&r.image||'';const x=ro?'disabled':'';
+    const m=modal(ro?'Product details':r?'Edit product':'Add product',
+      fld('p_code','Product code *','text',r&&r.code,x)+fld('p_name','Product name *','text',r&&r.name,x)+sel('p_cat','Category',[['','Select...'],...cats.map(c=>[c.id,c.name])],r&&r.categoryId,x)+fld('p_qty','Quantity','number',r?r.qty:0,x)+fld('p_cost','Cost price','number',r?r.cost:0,x)+fld('p_price','Selling price','number',r?r.price:0,x)+fld('p_mrp','MRP price','number',r?r.mrp:0,x)+sel('p_st','Status',[['Active','Active'],['Inactive','Inactive']],r&&r.status,x)+
+      `<div class="full"><label>Item image</label><div class="row"><span class="thumb" id="p_pv" style="display:grid;width:80px;height:80px;overflow:hidden">${img?`<img src="${esc(img)}" style="width:100%;height:100%;object-fit:cover">`:'🖼'}</span>${ro?'':'<input type="file" id="p_img" accept="image/*">'}</div></div>`,
+      async()=>{
+        const g=i=>$('#'+i).value.trim(),b={code:g('p_code'),name:g('p_name'),categoryId:g('p_cat'),qty:g('p_qty'),cost:g('p_cost'),price:g('p_price'),mrp:g('p_mrp'),status:g('p_st'),image:img};
+        if(r)Object.assign(r,await api('data/products/'+r.id,{method:'PUT',body:JSON.stringify(b)}));else d.unshift(await api('data/products',{method:'POST',body:JSON.stringify(b)}));
+        draw();toast('Product saved');
+      });
+    if(ro)m.querySelector('#ms').remove();
+    const fi=m.querySelector('#p_img');
+    if(fi)fi.onchange=async()=>{try{img=await readImg(fi.files[0]);m.querySelector('#p_pv').innerHTML=`<img src="${img}" style="width:100%;height:100%;object-fit:cover">`}catch(e){toast(e.message)}};
+  };
+  const draw=()=>{
+    const q=$('#pq').value.toLowerCase();
+    $('#pr').innerHTML=d.filter(r=>(r.code+r.name).toLowerCase().includes(q)).map(r=>`<tr><td>${esc(r.code)}</td><td><span class="thumb" style="display:inline-grid;vertical-align:middle;margin-right:8px;overflow:hidden;width:34px;height:34px">${r.image?`<img src="${esc(r.image)}" style="width:100%;height:100%;object-fit:cover">`:'👕'}</span>${esc(r.name)}</td><td>${esc(cn(r.categoryId))}</td><td>${r.qty}</td><td>${money2(r.cost)}</td><td>${money2(r.price)}</td><td>${money2(r.mrp)}</td><td><span class="pill ${r.status==='Active'?'a':'o'}">${esc(r.status)}</span></td><td>${esc(r.created)}</td><td style="white-space:nowrap"><button class="ib" data-v="${r.id}" title="View">👁</button><button class="ib" data-e="${r.id}" title="Edit">✎</button><button class="ib" data-d="${r.id}" title="Delete">🗑</button></td></tr>`).join('')||'<tr><td colspan="10" class="muted">No products yet. Click "+ Add product".</td></tr>';
+    $$('[data-v]').forEach(b=>b.onclick=()=>form(d.find(r=>r.id===b.dataset.v),1));
+    $$('[data-e]').forEach(b=>b.onclick=()=>form(d.find(r=>r.id===b.dataset.e)));
+    $$('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this product?'))return;try{await api('data/products/'+b.dataset.d,{method:'DELETE'});d=d.filter(r=>r.id!==b.dataset.d);draw()}catch(e){toast(e.message)}});
+  };
+  $('#pq').oninput=draw;$('#pa').onclick=()=>form();draw();
+}
+async function pGrn(){
+  const [g0,p,w,s]=await Promise.all([api('data/grns'),api('data/products'),api('data/warehouses'),api('suppliers')]);let g=g0;
+  const nm=(a,id)=>(a.find(x=>x.id===id)||{}).name||'-',el=$('#pg-other');
+  const draw=()=>{
+    el.innerHTML=`<div class="card"><div class="top" style="margin-bottom:12px"><h3>Goods received notes</h3><button class="btn" id="ga">+ New GRN</button></div><div class="scroll"><table><thead><tr><th>GRN no</th><th>Date</th><th>Supplier</th><th>Warehouse</th><th>Product</th><th>Qty</th><th>Cost price</th></tr></thead><tbody>${g.map(r=>`<tr><td>${esc(r.grnNo)}</td><td>${esc(r.date)}</td><td>${esc(r.supplier)}</td><td>${esc(nm(w,r.warehouseId))}</td><td>${esc(nm(p,r.productId))}</td><td>${r.qty}</td><td>${money2(r.cost)}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">No GRNs yet.</td></tr>'}</tbody></table></div></div>`;
+    $('#ga').onclick=()=>{
+      if(!p.length||!w.length||!s.suppliers.length)return toast('Add a supplier, a warehouse and a product first');
+      modal('New goods received note',sel('g_s','Supplier',s.suppliers.map(x=>[x.name,x.name]))+sel('g_w','Warehouse',w.map(x=>[x.id,x.name]))+sel('g_p','Product',p.map(x=>[x.id,x.code+' - '+x.name]))+fld('g_q','Quantity received','number',1)+fld('g_c','Cost price','number',0)+fld('g_d','Date','date',new Date().toISOString().slice(0,10)),async()=>{
+        const v=i=>$('#'+i).value,b={supplier:v('g_s'),warehouseId:v('g_w'),productId:v('g_p'),qty:v('g_q'),cost:v('g_c'),date:v('g_d')};
+        g.unshift(await api('data/grns',{method:'POST',body:JSON.stringify(b)}));
+        const pr=p.find(x=>x.id===b.productId);if(pr)pr.qty+=Number(b.qty);
+        draw();toast('GRN saved and stock updated');
+      });
+    };
+  };
+  draw();
 }
 async function pSuppliers(){
   const d=await api('suppliers'),S={Active:'a',Inactive:'o',Pending:'y'};let tab='All';
   $('#pg-other').innerHTML=`<div class="two"><div class="card"><div class="top" style="margin-bottom:12px"><div class="tabs2" id="st" style="margin:0">${['All','Active','Inactive','Pending'].map((t,i)=>`<button class="${i?'':'on'}">${t}</button>`).join('')}</div><button class="btn" id="sa">+ Add supplier</button></div><div class="scroll"><table><thead><tr><th>Supplier name</th><th>Status</th><th>Last order</th><th>Action</th></tr></thead><tbody id="sr"></tbody></table></div></div>
   <div><div class="card" style="margin-bottom:16px"><h3>Quick chat</h3>${d.chats.map(c=>`<div class="row" style="padding:10px 0"><span class="ava">${c.name[0]}</span><div><b>${c.name}</b><div class="muted">${c.msg} · ${c.time}</div></div></div>`).join('')}</div><div class="card"><h3>Recent activity</h3>${d.activity.map(a=>`<p style="padding:9px 0;border-top:1px solid var(--line)"><b>${a.who}</b> ${a.what}<br><span class="muted">${a.when}</span></p>`).join('')}</div></div></div>`;
-  const draw=()=>{$('#sr').innerHTML=d.suppliers.filter(s=>tab==='All'||s.status===tab).map(s=>`<tr><td><span class="ava">${s.name[0]}</span><b>${s.name}</b><div class="muted" style="margin-left:38px">${s.loc}</div></td><td><span class="pill ${S[s.status]}">${s.status}</span></td><td>${s.last}</td><td><button class="ib" onclick="toast('Supplier options coming soon')">⋯</button></td></tr>`).join('')};
+  const draw=()=>{$('#sr').innerHTML=d.suppliers.filter(s=>tab==='All'||s.status===tab).map(s=>`<tr><td><span class="ava">${(s.name||'?')[0]}</span><b>${esc(s.name)}</b><div class="muted" style="margin-left:38px">${esc(s.contact?s.contact+' · ':'')}${esc(s.mobile||'')}${s.loc?' · '+esc(s.loc):''}</div></td><td><span class="pill ${S[s.status]}">${s.status}</span></td><td>${s.last}</td><td><button class="ib" onclick="toast('Supplier options coming soon')">⋯</button></td></tr>`).join('')};
   $$('#st button').forEach(b=>b.onclick=()=>{tab=b.textContent;$$('#st button').forEach(x=>x.classList.toggle('on',x===b));draw()});
-  $('#sa').onclick=async()=>{const name=prompt('Supplier name');if(!name)return;const loc=prompt('City, country')||'';d.suppliers.unshift(await api('suppliers',{method:'POST',body:JSON.stringify({name,loc})}));draw();toast('Supplier added')};
+  $('#sa').onclick=()=>modal('Add supplier',fld('s_f','First name *')+fld('s_l','Last name')+fld('s_m','Mobile number','tel')+fld('s_e','Email','email')+fld('s_c','Company name *')+fld('s_a','Address'),async()=>{const g=i=>$('#'+i).value.trim();d.suppliers.unshift(await api('suppliers',{method:'POST',body:JSON.stringify({first:g('s_f'),last:g('s_l'),mobile:g('s_m'),email:g('s_e'),company:g('s_c'),address:g('s_a')})}));draw();toast('Supplier added')});
   draw();
 }
+const REPORTS=[['inventory','Inventory report','Stock on hand and value of every product'],['low','Low stock report','Products with 5 or fewer pieces left'],['category','Stock by category','Pieces and stock value per category'],['grn','Goods received report','Everything received into the warehouses'],['suppliers','Supplier report','Every supplier with contact details'],['pricing','Pricing report','Cost, selling price, MRP and margin']];
 async function pReports(){
-  let d=await api('reports'),pg=1,type='All';const sel=new Set(),N=6,el=$('#pg-other');
-  const draw=()=>{
-    const f=d.filter(r=>type==='All'||r.type===type),pages=Math.max(1,Math.ceil(f.length/N));pg=Math.min(pg,pages);
-    el.innerHTML=`<div class="top" style="margin-bottom:14px"><span></span><div class="row"><button class="ghost" id="rd" ${sel.size?'':'disabled'}>🗑 Delete ${sel.size} report${sel.size==1?'':'s'}</button><select id="rt" class="ghost">${['All','Custom','Template'].map(t=>`<option ${t===type?'selected':''}>${t}</option>`).join('')}</select><button class="btn" id="ra">+ Add report</button></div></div>
-    <div class="cards4">${d.filter(r=>r.type==='Template').slice(0,4).map(r=>`<div class="tpl"><div class="pv"><i></i><i></i><i></i><i style="width:80%"></i></div><div class="ft"><b>${r.name}</b><div class="muted">Modified ${r.date}</div></div></div>`).join('')}</div>
-    <div class="card"><div class="scroll"><table><thead><tr><th></th><th>Report name</th><th>Type</th><th>Created by</th><th>Description</th><th>Date created</th></tr></thead><tbody>${f.slice((pg-1)*N,pg*N).map(r=>`<tr class="${sel.has(r.id)?'sel':''}"><td><input type="checkbox" data-id="${r.id}" ${sel.has(r.id)?'checked':''}></td><td>${r.name}</td><td>${r.type}</td><td><span class="ava">${r.by[0]}</span>${r.by}</td><td>${r.desc}</td><td>${r.date}</td></tr>`).join('')}</tbody></table></div>
-    <div class="pg">${Array.from({length:pages},(_,i)=>`<button class="ghost ${i+1===pg?'on':''}" data-pg="${i+1}">${i+1}</button>`).join('')}</div></div>`;
-    $$('[data-id]').forEach(c=>c.onchange=()=>{c.checked?sel.add(c.dataset.id):sel.delete(c.dataset.id);draw()});
-    $$('[data-pg]').forEach(b=>b.onclick=()=>{pg=+b.dataset.pg;draw()});
-    $('#rt').onchange=e=>{type=e.target.value;pg=1;draw()};
-    $('#rd').onclick=async()=>{if(!confirm('Delete '+sel.size+' selected report(s)?'))return;await api('reports',{method:'DELETE',body:JSON.stringify({ids:[...sel]})});d=d.filter(r=>!sel.has(r.id));sel.clear();draw();toast('Reports deleted')};
-    $('#ra').onclick=async()=>{const name=prompt('Report name');if(!name)return;d.unshift(await api('reports',{method:'POST',body:JSON.stringify({name})}));draw();toast('Report added')};
-  };
-  draw();
+  $('#pg-other').innerHTML=`<div class="cards4">${REPORTS.map(r=>`<button class="card rbtn" data-r="${r[0]}"><b>${r[1]}</b><div class="muted" style="margin-top:6px">${r[2]}</div><span style="color:var(--or);display:block;margin-top:12px">Open report →</span></button>`).join('')}</div>`;
+  $$('[data-r]').forEach(b=>b.onclick=()=>openReport(b.dataset.r).catch(e=>toast(e.message)));
 }
-async function pSettings(){
-  const s=await api('settings');
-  const G=[['orders','Orders','New orders, payments and delivery updates.'],['stock','Low stock','Pieces that are running low or out of stock.'],['messages','Messages','Chats from suppliers and customers.'],['suppliers','Suppliers','Supplier status changes and new deals.'],['reports','Reports','When a scheduled report is ready.']];
-  $('#pg-other').innerHTML=`<div class="card"><a href="#" class="muted" onclick="go('dashboard');return false">← Back to dashboard</a><div class="tabs2" style="margin:16px 0">${['My details','Profile','Password','Team','Plan','Billing','Email','Notifications','Integrations','API'].map(t=>`<button class="${t==='Notifications'?'on':''}" data-t="${t}">${t}</button>`).join('')}</div><h3>Notification settings</h3><p class="muted" style="margin-bottom:8px">We may still send you important notices about your account outside these settings.</p>${G.map(([k,t,x])=>`<div class="row" style="justify-content:space-between;align-items:flex-start;padding:18px 0;border-top:1px solid var(--line)"><div style="max-width:320px"><b>${t}</b><div class="muted">${x}</div></div><div style="display:grid;gap:10px;min-width:120px">${['push','email','sms'].map(c=>`<label class="row" style="margin:0;font-weight:400"><span class="sw"><input type="checkbox" data-k="${k}" data-c="${c}" ${s[k][c]?'checked':''}><span></span></span>${c==='sms'?'SMS':c[0].toUpperCase()+c.slice(1)}</label>`).join('')}</div></div>`).join('')}</div>`;
-  $$('[data-t]').forEach(b=>b.onclick=()=>b.dataset.t!=='Notifications'&&toast(b.dataset.t+' settings coming soon'));
-  $$('[data-k]').forEach(c=>c.onchange=async()=>{s[c.dataset.k][c.dataset.c]=c.checked;try{await api('settings',{method:'POST',body:JSON.stringify(s)});toast('Saved')}catch(e){toast(e.message)}});
+async function openReport(id){
+  const [p,c,g,s]=await Promise.all([api('data/products'),api('data/categories'),api('data/grns'),api('suppliers')]);
+  const R=REPORTS.find(r=>r[0]===id),cn=x=>(c.find(k=>k.id===x)||{}).name||'-',pn=x=>(p.find(k=>k.id===x)||{}).name||'-';
+  const B={
+    inventory:[['Code','Product','Category','Qty','Cost','Stock value'],p.map(x=>[x.code,x.name,cn(x.categoryId),x.qty,money2(x.cost),money2(x.qty*x.cost)])],
+    low:[['Code','Product','Category','Qty left'],p.filter(x=>x.qty<=5).map(x=>[x.code,x.name,cn(x.categoryId),x.qty])],
+    category:[['Category','Products','Pieces','Stock value'],c.map(k=>{const l=p.filter(x=>x.categoryId===k.id);return[k.name,l.length,l.reduce((a,x)=>a+x.qty,0),money2(l.reduce((a,x)=>a+x.qty*x.cost,0))]})],
+    grn:[['GRN no','Date','Supplier','Product','Qty','Cost'],g.map(x=>[x.grnNo,x.date,x.supplier,pn(x.productId),x.qty,money2(x.cost)])],
+    suppliers:[['Company','Contact','Mobile','Email','Address','Status'],s.suppliers.map(x=>[x.name,x.contact||'-',x.mobile||'-',x.email||'-',x.loc||'-',x.status])],
+    pricing:[['Code','Product','Cost','Selling','MRP','Margin'],p.map(x=>[x.code,x.name,money2(x.cost),money2(x.price),money2(x.mrp),x.price?Math.round((x.price-x.cost)/x.price*100)+'%':'-'])]
+  }[id];
+  $('#ptitle').textContent=R[1];$('#psub').textContent=R[2];
+  $('#pg-other').innerHTML=`<div class="top" style="margin-bottom:14px"><button class="ghost" id="rb">← Back to reports</button><button class="btn" onclick="window.print()">Print report</button></div><div class="card"><div class="scroll"><table><thead><tr>${B[0].map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${B[1].map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')||`<tr><td class="muted" colspan="${B[0].length}">No data yet.</td></tr>`}</tbody></table></div></div>`;
+  $('#rb').onclick=()=>go('reports');
 }
+const STABS=['My details','Profile','Password','Team','Roles','Billing','Email','Notifications'];
+async function pSettings(tab='My details'){
+  $('#pg-other').innerHTML=`<div class="card"><div class="tabs2">${STABS.map(t=>`<button class="${t===tab?'on':''}" data-t="${t}">${t}</button>`).join('')}</div><div id="sb"></div></div>`;
+  $$('[data-t]').forEach(b=>b.onclick=()=>pSettings(b.dataset.t).catch(e=>toast(e.message)));
+  await ST[tab]($('#sb'));
+}
+const soon=n=>sb=>{sb.innerHTML=`<h3>${n}</h3><p class="muted">Coming soon.</p>`};
+const ST={
+  'My details':async sb=>{
+    const {me}=await api('profile');
+    sb.innerHTML=`<h3>My details</h3><div class="mb" style="margin-top:12px;max-width:640px">${fld('m_n','Name','text',me.name)+fld('m_e','Email','email',me.email)+fld('m_p','Phone number','tel',me.phone)+fld('m_d','Date of birth','date',me.dob)+fld('m_i','NIC no','text',me.nic)}</div><button class="btn" id="msv" style="margin-top:16px">Save changes</button>`;
+    $('#msv').onclick=async()=>{try{const r=await api('profile',{method:'PUT',body:JSON.stringify({me:{name:$('#m_n').value,email:$('#m_e').value,phone:$('#m_p').value,dob:$('#m_d').value,nic:$('#m_i').value}})});ME=r.user;$('#uname').textContent=r.user.name;$('#umail').textContent=r.user.email;toast('Saved')}catch(e){toast(e.message)}};
+  },
+  Profile:async sb=>{
+    const {store}=await api('profile');
+    sb.innerHTML=`<h3>Website contact details</h3><p class="muted">Shown to customers on the website.</p><div class="mb" style="margin-top:12px;max-width:640px">${fld('w_p','Contact number','tel',store.phone)+fld('w_e','Contact email','email',store.email)}</div><button class="btn" id="wsv" style="margin-top:16px">Save changes</button>`;
+    $('#wsv').onclick=async()=>{try{await api('profile',{method:'PUT',body:JSON.stringify({store:{phone:$('#w_p').value,email:$('#w_e').value}})});toast('Saved')}catch(e){toast(e.message)}};
+  },
+  Password:sb=>{
+    sb.innerHTML=`<h3>Change password</h3><p class="muted">We email a 6-digit code to ${esc(ME.email)} to confirm it is you.</p><div style="max-width:380px"><button class="btn" id="po" style="margin:14px 0">Send code to my email</button><div id="pf" hidden>${fld('o_c','Code from the email','text','','inputmode="numeric" maxlength="6"')+fld('o_p','New password','password','','autocomplete="new-password"')+fld('o_q','Confirm new password','password','','autocomplete="new-password"')}<button class="btn" id="pc" style="margin-top:16px">Change password</button></div></div>`;
+    $('#po').onclick=async()=>{try{const r=await api('password/otp',{method:'POST'});$('#pf').hidden=false;toast(r.dev?'Email is not set up yet: the code is in the server terminal':'Code sent to your email')}catch(e){toast(e.message)}};
+    $('#pc').onclick=async()=>{const p=$('#o_p').value;if(p!==$('#o_q').value)return toast('Passwords do not match');try{await api('password/change',{method:'POST',body:JSON.stringify({otp:$('#o_c').value.trim(),password:p})});toast('Password changed');ST.Password(sb)}catch(e){toast(e.message)}};
+  },
+  Team:async sb=>{
+    const [u,roles]=await Promise.all([api('team'),api('data/roles')]),rn=id=>(roles.find(r=>r.id===id)||{}).name||'Owner';
+    sb.innerHTML=`<div class="top" style="margin-bottom:12px"><h3>Team</h3><button class="btn" id="ta">+ Create user</button></div><div class="scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Role</th><th></th></tr></thead><tbody>${u.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td><td>${esc(x.mobile)||'-'}</td><td><span class="pill p">${esc(rn(x.roleId))}</span></td><td>${x.roleId?`<button class="ib" data-u="${x.id}">🗑</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#ta').onclick=()=>{
+      if(!roles.length)return toast('Create a role first (Settings → Roles)');
+      modal('Create user',fld('u_f','First name *')+fld('u_l','Last name')+fld('u_e','Email (login username) *','email')+fld('u_m','Mobile number','tel')+fld('u_p','Password *','password','','autocomplete="new-password"')+fld('u_q','Confirm password *','password','','autocomplete="new-password"')+sel('u_r','Role *',roles.map(r=>[r.id,r.name])),async()=>{
+        const g=i=>$('#'+i).value;
+        await api('team',{method:'POST',body:JSON.stringify({firstName:g('u_f').trim(),lastName:g('u_l').trim(),email:g('u_e').trim(),mobile:g('u_m').trim(),password:g('u_p'),confirm:g('u_q'),roleId:g('u_r')})});
+        toast('User created');ST.Team(sb);
+      });
+    };
+    $$('[data-u]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this user?'))return;try{await api('team/'+b.dataset.u,{method:'DELETE'});ST.Team(sb)}catch(e){toast(e.message)}});
+  },
+  Roles:async sb=>{
+    const roles=await api('data/roles');
+    sb.innerHTML=`<div class="top" style="margin-bottom:12px"><h3>Roles &amp; access</h3><button class="btn" id="ra">+ Create role</button></div><div class="scroll"><table><thead><tr><th>Role</th><th>Can access</th><th></th></tr></thead><tbody>${roles.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${r.perms.map(m=>`<span class="pill p" style="margin-right:4px">${MN[m].split(' ')[0]}</span>`).join('')||'<span class="muted">Nothing</span>'}</td><td><button class="ib" data-r="${r.id}">✎</button></td></tr>`).join('')||'<tr><td colspan="3" class="muted">No roles yet.</td></tr>'}</tbody></table></div>`;
+    const form=r=>modal(r?'Edit role':'Create role',`<div class="full">${fld('r_n','Role name *','text',r&&r.name)}</div><div class="full"><label>Roles &amp; access</label>${Object.keys(MN).map(m=>`<label class="row" style="font-weight:400;margin:6px 0"><input type="checkbox" class="rp" value="${m}" ${r&&r.perms.includes(m)?'checked':''}>${MN[m]}</label>`).join('')}</div>`,async()=>{
+      const b={name:$('#r_n').value.trim(),perms:[...$$('.rp')].filter(c=>c.checked).map(c=>c.value)};
+      if(!b.name)throw new Error('Enter a role name.');
+      await api(r?'data/roles/'+r.id:'data/roles',{method:r?'PUT':'POST',body:JSON.stringify(b)});ST.Roles(sb);
+    });
+    $('#ra').onclick=()=>form();
+    $$('[data-r]').forEach(b=>b.onclick=()=>form(roles.find(r=>r.id===b.dataset.r)));
+  },
+  Billing:soon('Billing'),Email:soon('Email'),
+  Notifications:sb=>{
+    sb.innerHTML=`<h3>Notification settings</h3><div class="row" style="justify-content:space-between;padding:18px 0;border-top:1px solid var(--line);margin-top:10px"><div style="max-width:420px"><b>Show desktop notifications</b><div class="muted">Pop up a notification on this computer when a new order arrives. Keep this tab open.</div></div><label class="sw" style="margin:0"><input type="checkbox" id="nt" ${notifyOn()?'checked':''}><span></span></label></div><button class="ghost" id="ntt">Send a test notification</button>`;
+    $('#nt').onchange=async e=>{
+      if(e.target.checked&&(typeof Notification==='undefined'||await Notification.requestPermission()!=='granted')){e.target.checked=false;return toast('Allow notifications in your browser first')}
+      try{localStorage.setItem('myc-notify',e.target.checked?'1':'0')}catch(x){}
+      toast(e.target.checked?'Notifications on':'Notifications off');
+    };
+    $('#ntt').onclick=()=>typeof Notification!=='undefined'&&Notification.permission==='granted'?new Notification('MYC back office',{body:'Test notification',icon:'myc-logo.jpeg'}):toast('Turn notifications on first');
+  }
+};
 
 /* auto sign-in if a token exists */
 if(tok()) api('me').then(d=>enter(d.user)).catch(()=>{});

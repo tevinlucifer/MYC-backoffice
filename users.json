@@ -3,6 +3,33 @@
     "id": "2cff5f18-bf34-48e4-95ae-87ce74a2842f",
     "name": "Tevin Gampalage",
     "email": "tevingampalage29@gmail.com",
-    "password": "b46a181791ac1ce6a900fcf2daf383f1:4c32fe524145b7f87bb663862be533e54c604cfd30270a98acbf48539e92a9820114bd975d995be66a7743764eaf48117920dd7add0252cf2cdd73412dfa14bb"
+    "password": "b46a181791ac1ce6a900fcf2daf383f1:4c32fe524145b7f87bb663862be533e54c604cfd30270a98acbf48539e92a9820114bd975d995be66a7743764eaf48117920dd7add0252cf2cdd73412dfa14bb",
+    "settings": {
+      "orders": {
+        "push": 1,
+        "email": 1,
+        "sms": 0
+      },
+      "stock": {
+        "push": 1,
+        "email": 0,
+        "sms": 0
+      },
+      "messages": {
+        "push": 1,
+        "email": 1,
+        "sms": 0
+      },
+      "suppliers": {
+        "push": 0,
+        "email": 0,
+        "sms": 0
+      },
+      "reports": {
+        "push": 0,
+        "email": 1,
+        "sms": 0
+      }
+    }
   }
 ]

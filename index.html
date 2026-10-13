@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MYC 1989 | Back Office</title>
-<link rel="icon" href="myc-logo.jpg">
+<link rel="icon" href="images/myc-logo.jpg">
 <style>
 :root[data-theme="light"]{--bg:#f6f3ef;--card:#fff;--line:#e8e2da;--tx:#1a1a1a;--mut:#80766b;--soft:#fff3e9;--hov:#f2ede7}
 :root[data-theme="dark"]{--bg:#141414;--card:#1e1e1e;--line:#2c2c2c;--tx:#f3efea;--mut:#9b9389;--soft:#2b2017;--hov:#262626}
@@ -128,7 +128,7 @@ select{width:100%;padding:11px 12px;background:var(--card);border:1px solid var(
 <!-- LOGIN / SIGN UP -->
 <section id="auth">
   <div class="hero">
-    <img src="myc-logo.jpg" alt="MYC 2026 logo">
+    <img src="images/myc-logo.jpg" alt="MYC 1989 logo">
   </div>
   <div class="formside">
     <button class="ghost tg" data-theme-toggle aria-label="Toggle theme">◐</button>
@@ -151,7 +151,7 @@ select{width:100%;padding:11px 12px;background:var(--card);border:1px solid var(
 <!-- BACK OFFICE -->
 <div id="app" hidden>
   <aside id="side">
-    <div class="brand"><span class="lg"><img src="myc-logo.jpg" alt=""></span><div><b>MYC 1989</b><span class="muted">Back office</span></div></div>
+    <div class="brand"><span class="lg"><img src="images/myc-logo.jpg" alt=""></span><div><b>MYC 1989</b><span class="muted">Back office</span></div></div>
     <div class="grp">Sales &amp; insights</div>
     <button class="nav on" data-p="dashboard"><i>▦</i>Dashboard</button>
     <button class="nav" data-p="reports"><i>▤</i>Reports</button>
@@ -247,7 +247,7 @@ function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeou
 /* api */
 const tok=()=>{try{return localStorage.getItem('myc-token')}catch(e){return null}};
 // If the page is opened from Live Server or a file, talk to the Node server on port 3000
-const API=location.port==='3000'?'':'http://localhost:3000';
+const API=['5500','5501'].includes(location.port)?'http://localhost:3000':'';
 async function api(path,opt={}){
   let r;
   try{r=await fetch(API+'/api/'+path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+(tok()||'')}})}
@@ -357,7 +357,7 @@ function modal(t,body,ok){
   m.querySelector('#ms').onclick=async()=>{try{await ok(m);m.remove()}catch(e){m.querySelector('#me').textContent=e.message}};
   return m;
 }
-function readImg(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.8))};i.onerror=()=>rej(new Error('That file is not an image'));i.src=r.result};r.readAsDataURL(f)})}
+function readImg(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,400/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.7))};i.onerror=()=>rej(new Error('That file is not an image'));i.src=r.result};r.readAsDataURL(f)})}
 function applyPerms(){
   $$('.nav[data-p]').forEach(b=>b.hidden=!can(b.dataset.p));
   $('#pgrp').hidden=![...$$('.sub')].some(b=>can(b.dataset.p));
@@ -366,7 +366,7 @@ const notifyOn=()=>{try{return localStorage.getItem('myc-notify')==='1'}catch(e)
 let since=Date.now(),pt;
 function poll(){clearInterval(pt);pt=setInterval(async()=>{
   if(!notifyOn()||typeof Notification==='undefined'||Notification.permission!=='granted')return;
-  try{(await api('orders/since/'+since)).forEach(x=>{new Notification('New order #'+x.id,{body:x.customer+' · '+money2(x.total),icon:'myc-logo.jpg'});since=Math.max(since,x.time)})}catch(e){}
+  try{(await api('orders/since/'+since)).forEach(x=>{new Notification('New order #'+x.id,{body:x.customer+' · '+money2(x.total),icon:'images/myc-logo.jpg'});since=Math.max(since,x.time)})}catch(e){}
 },15000)}
 const T={dashboard:['Dashboard','Track sales, stock and customers for MYC.'],reports:['Reports','Open a report to review it or print it.'],categories:['Categories','Group your products.'],warehouse:['Warehouse','Where your stock is kept.'],products:['Products','Codes, stock and prices for every item.'],grn:['Goods received notes','Record stock arriving from suppliers.'],suppliers:['Suppliers','Manage the mills and workshops you buy from.'],settings:['Settings','Manage your account, team and notifications.']};
 function go(p){
@@ -520,7 +520,7 @@ const ST={
       try{localStorage.setItem('myc-notify',e.target.checked?'1':'0')}catch(x){}
       toast(e.target.checked?'Notifications on':'Notifications off');
     };
-    $('#ntt').onclick=()=>typeof Notification!=='undefined'&&Notification.permission==='granted'?new Notification('MYC back office',{body:'Test notification',icon:'myc-logo.jpg'}):toast('Turn notifications on first');
+    $('#ntt').onclick=()=>typeof Notification!=='undefined'&&Notification.permission==='granted'?new Notification('MYC back office',{body:'Test notification',icon:'images/myc-logo.jpg'}):toast('Turn notifications on first');
   }
 };
 

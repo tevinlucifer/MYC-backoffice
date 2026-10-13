@@ -7,21 +7,30 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'change-this-secret-before-going-live';
+if (process.env.VERCEL && !process.env.JWT_SECRET) throw new Error('Set the JWT_SECRET environment variable.');
 const USERS_FILE = path.join(__dirname, 'users.json');
 
 const app = express();
 app.use(express.json({ limit: '4mb' }));
+// Load the saved data at the start of every API request and save changes before replying (works on serverless)
+app.use('/api', async (req, res, next) => {
+  try { await load(); } catch (e) { console.error(e); return res.status(500).json({ error: 'Database error. Check the Supabase settings.' }); }
+  const send = res.json.bind(res);
+  res.json = async b => { try { await flush(); } catch (e) { console.error(e); res.status(500); b = { error: 'Could not save your changes.' }; } return send(b); };
+  next();
+});
 // Allow the page to call the API even when opened from Live Server (port 5501)
 app.use((req, res, next) => {
   res.set({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-app.use(express.static(__dirname)); // serves index.html and myc-logo.jpeg
+app.use(express.static(path.join(__dirname, 'public'))); // serves index.html and myc-logo.jpeg
 
 /* ---------- users (stored in users.json) ---------- */
-const readUsers = () => { try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { return []; } };
-const writeUsers = u => fs.writeFileSync(USERS_FILE, JSON.stringify(u, null, 2));
+let USERS = [];
+const readUsers = () => USERS;
+const writeUsers = u => { USERS = u; };
 
 const hash = (pw, salt = crypto.randomBytes(16).toString('hex')) =>
   salt + ':' + crypto.scryptSync(pw, salt, 64).toString('hex');
@@ -129,7 +138,7 @@ const P = [
 app.get('/api/products', auth, (req, res) => res.json(P.map(([num, supplier, product, icon, ordered, delivery, status, payment, amount]) =>
   ({ num, supplier, product, icon, ordered, delivery, status, payment, amount }))));
 
-const suppliers = [
+const SEED_SUPPLIERS = [
   { name: 'Ceylon Cotton Mills', loc: 'Colombo, Sri Lanka', status: 'Active', last: 'Oct 5, 2026' },
   { name: 'PakTextile Co.', loc: 'Karachi, Pakistan', status: 'Inactive', last: 'Oct 6, 2026' },
   { name: 'Denim Works', loc: 'Istanbul, Turkey', status: 'Active', last: 'Oct 12, 2026' },
@@ -138,7 +147,7 @@ const suppliers = [
   { name: 'NovaDye Industries', loc: 'Dhaka, Bangladesh', status: 'Active', last: 'Oct 6, 2026' }
 ];
 app.get('/api/suppliers', auth, (req, res) => res.json({
-  suppliers,
+  suppliers: DB.suppliers,
   chats: [
     { name: 'Ceylon Cotton Mills', msg: 'Sent a message', time: '12:55 pm' },
     { name: 'ThreadLogix', msg: 'Sent a photo', time: '12:55 pm' },
@@ -154,7 +163,7 @@ app.post('/api/suppliers', auth, can('suppliers'), (req, res) => {
   const t = k => String(req.body[k] || '').trim().slice(0, 120);
   const s = { name: t('company'), contact: (t('first') + ' ' + t('last')).trim(), mobile: t('mobile'), email: t('email'), loc: t('address'), status: 'Active', last: '-' };
   if (!t('first') || !s.name) return res.status(400).json({ error: 'First name and company name are required.' });
-  suppliers.unshift(s);
+  DB.suppliers.unshift(s);
   res.json(s);
 });
 
@@ -204,9 +213,33 @@ app.post('/api/settings', auth, (req, res) => {
 let nodemailer = null; try { nodemailer = require('nodemailer'); } catch {}
 const MODS = ['dashboard', 'reports', 'categories', 'warehouse', 'products', 'grn', 'suppliers', 'settings'];
 const DBF = path.join(__dirname, 'data.json');
-let DB; try { DB = JSON.parse(fs.readFileSync(DBF, 'utf8')); } catch { DB = {}; }
-DB = { categories: [], warehouses: [], products: [], grns: [], roles: [], store: {}, ...DB };
-const save = () => fs.writeFileSync(DBF, JSON.stringify(DB));
+function emptyDB() { return { categories: [], warehouses: [], products: [], grns: [], roles: [], store: {}, suppliers: JSON.parse(JSON.stringify(SEED_SUPPLIERS)), orders: [], otps: {} }; }
+let DB = emptyDB(), snap = { users: '', db: '' };
+const sb = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY
+  ? require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } }) : null;
+if (process.env.VERCEL && !sb) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_KEY.');
+async function load() {
+  if (sb) {
+    const { data, error } = await sb.from('kv').select('key,value').in('key', ['users', 'db']);
+    if (error) throw error;
+    const m = Object.fromEntries(data.map(r => [r.key, r.value]));
+    USERS = m.users || []; DB = { ...emptyDB(), ...(m.db || {}) };
+  } else {
+    try { USERS = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { USERS = []; }
+    try { DB = { ...emptyDB(), ...JSON.parse(fs.readFileSync(DBF, 'utf8')) }; } catch { DB = emptyDB(); }
+  }
+  snap = { users: JSON.stringify(USERS), db: JSON.stringify(DB) };
+}
+async function put(key, value) {
+  if (sb) { const { error } = await sb.from('kv').upsert({ key, value }); if (error) throw error; }
+  else fs.writeFileSync(key === 'users' ? USERS_FILE : DBF, JSON.stringify(value, null, 2));
+}
+async function flush() {
+  const u = JSON.stringify(USERS), d = JSON.stringify(DB);
+  if (u !== snap.users) { await put('users', USERS); snap.users = u; }
+  if (d !== snap.db) { await put('db', DB); snap.db = d; }
+}
+const save = () => {};
 function permsOf(u) { return u.roleId ? ((DB.roles.find(r => r.id === u.roleId) || {}).perms || []) : MODS; }
 function can(m) { return (req, res, next) => permsOf(req.user).includes(m) ? next() : res.status(403).json({ error: 'You do not have access to this.' }); }
 const uid = () => 'x' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
@@ -303,10 +336,10 @@ app.put('/api/profile', auth, (req, res) => {
 });
 
 /* change password with an emailed OTP (set SMTP_* variables; otherwise the code prints in this terminal) */
-const otps = {};
 app.post('/api/password/otp', auth, async (req, res) => {
   const code = String(crypto.randomInt(100000, 1000000));
-  otps[req.user.id] = { code, exp: Date.now() + 10 * 60000, tries: 0 };
+  const rec = { code, exp: Date.now() + 10 * 60000, tries: 0 };
+  DB.otps[req.user.id] = rec;
   const smtp = process.env.SMTP_HOST && nodemailer;
   try {
     if (smtp) {
@@ -314,27 +347,28 @@ app.post('/api/password/otp', auth, async (req, res) => {
       await nodemailer.createTransport({ host: process.env.SMTP_HOST, port, secure: port === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
         .sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: req.user.email, subject: 'MYC back office password code', text: `Your code is ${code}. It expires in 10 minutes.` });
     } else console.log(`[DEV] Password code for ${req.user.email}: ${code}`);
+    DB.otps[req.user.id] = rec;
     res.json({ sent: !!smtp, dev: !smtp });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Could not send the email. Check your SMTP settings.' }); }
 });
 app.post('/api/password/change', auth, (req, res) => {
-  const o = otps[req.user.id], { otp, password } = req.body;
+  const o = DB.otps[req.user.id], { otp, password } = req.body;
   if (!o || o.exp < Date.now()) return res.status(400).json({ error: 'The code expired. Request a new one.' });
-  if (++o.tries > 5) { delete otps[req.user.id]; return res.status(429).json({ error: 'Too many attempts. Request a new code.' }); }
+  if (++o.tries > 5) { delete DB.otps[req.user.id]; return res.status(429).json({ error: 'Too many attempts. Request a new code.' }); }
   if (otp !== o.code) return res.status(400).json({ error: 'Incorrect code.' });
   if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   const users = readUsers(); users.find(u => u.id === req.user.id).password = hash(password); writeUsers(users);
-  delete otps[req.user.id]; res.json({ ok: true });
+  delete DB.otps[req.user.id]; res.json({ ok: true });
 });
 
 /* new-order notifications: the website posts each order here with the x-api-key header */
-const orders = [];
 app.post('/api/orders/webhook', (req, res) => {
   if (req.get('x-api-key') !== (process.env.ORDER_KEY || 'change-me-order-key')) return res.status(401).json({ error: 'Bad key' });
-  orders.push({ id: orders.length + 1, time: Date.now(), customer: String(req.body.customer || 'A customer').slice(0, 80), total: Number(req.body.total) || 0 });
-  if (orders.length > 200) orders.shift();
+  DB.orders.push({ id: DB.orders.length + 1, time: Date.now(), customer: String(req.body.customer || 'A customer').slice(0, 80), total: Number(req.body.total) || 0 });
+  if (DB.orders.length > 200) DB.orders.shift();
   res.json({ ok: true });
 });
-app.get('/api/orders/since/:t', auth, (req, res) => res.json(orders.filter(o => o.time > Number(req.params.t))));
+app.get('/api/orders/since/:t', auth, (req, res) => res.json(DB.orders.filter(o => o.time > Number(req.params.t))));
 
-app.listen(PORT, () => console.log(`MYC back office running at http://localhost:${PORT}`));
+if (require.main === module) app.listen(PORT, () => console.log(`MYC back office running at http://localhost:${PORT}`));
+module.exports = app;

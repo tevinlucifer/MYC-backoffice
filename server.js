@@ -11,7 +11,13 @@ const USERS_FILE = path.join(__dirname, 'users.json');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(__dirname)); // serves index.html and logo.png
+// Allow the page to call the API even when opened from Live Server (port 5501)
+app.use((req, res, next) => {
+  res.set({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' });
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+app.use(express.static(__dirname)); // serves index.html and myc-logo.jpeg
 
 /* ---------- users (stored in users.json) ---------- */
 const readUsers = () => { try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); } catch { return []; } };

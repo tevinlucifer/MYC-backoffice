@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MYC 1989 | Back Office</title>
-<link rel="icon" href="logo.png">
+<link rel="icon" href="myc-logo.jpeg">
 <style>
 :root[data-theme="light"]{--bg:#f6f3ef;--card:#fff;--line:#e8e2da;--tx:#1a1a1a;--mut:#80766b;--soft:#fff3e9;--hov:#f2ede7}
 :root[data-theme="dark"]{--bg:#141414;--card:#1e1e1e;--line:#2c2c2c;--tx:#f3efea;--mut:#9b9389;--soft:#2b2017;--hov:#262626}
@@ -23,7 +23,9 @@ button{cursor:pointer}
 /* auth */
 #auth{min-height:100vh;display:grid;grid-template-columns:1fr 1fr}
 .hero{background:#1a1a1a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:40px;text-align:center;background-image:radial-gradient(circle at 50% 40%,rgba(255,122,26,.18),transparent 60%)}
-.hero img{width:230px;max-width:60%;border-radius:50%}
+.hero img{width:420px;max-width:85%}
+.lg{width:40px;height:40px;border-radius:50%;overflow:hidden;background:#1a1a1a;flex:none}
+.lg img{width:140%;margin:-17% 0 0 -20%;display:block}
 .hero p{color:var(--or);letter-spacing:.14em;font-weight:600;font-size:13px}
 .formside{display:flex;align-items:center;justify-content:center;padding:32px;position:relative}
 .box{width:100%;max-width:380px}
@@ -41,7 +43,6 @@ input:focus{border-color:var(--or);outline:none}
 #app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
 aside{background:var(--card);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:0 6px 14px}
-.brand img{width:40px;height:40px;border-radius:50%}
 .brand b{display:block}
 .grp{font-size:12px;color:var(--mut);margin:16px 8px 6px}
 .nav{display:flex;gap:10px;align-items:center;width:100%;padding:10px;border:0;background:none;border-radius:10px;text-align:left;color:var(--mut)}
@@ -97,8 +98,7 @@ main{padding:18px 14px}}
 <!-- LOGIN / SIGN UP -->
 <section id="auth">
   <div class="hero">
-    <img src="logo.png" alt="MYC 1989 logo">
-    <p>UNITED BY STYLE, DRIVEN BY SPIRIT</p>
+    <img src="myc-logo.jpeg" alt="MYC 1989 logo">
   </div>
   <div class="formside">
     <button class="ghost tg" data-theme-toggle aria-label="Toggle theme">◐</button>
@@ -121,7 +121,7 @@ main{padding:18px 14px}}
 <!-- BACK OFFICE -->
 <div id="app" hidden>
   <aside id="side">
-    <div class="brand"><img src="logo.png" alt=""><div><b>MYC 1989</b><span class="muted">Back office</span></div></div>
+    <div class="brand"><span class="lg"><img src="myc-logo.jpeg" alt=""></span><div><b>MYC 1989</b><span class="muted">Back office</span></div></div>
     <div class="grp">Sales &amp; insights</div>
     <button class="nav on"><i>▦</i>Dashboard</button>
     <div class="grp">Catalog</div>
@@ -205,10 +205,14 @@ function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeou
 
 /* api */
 const tok=()=>{try{return localStorage.getItem('myc-token')}catch(e){return null}};
+// If the page is opened from Live Server or a file, talk to the Node server on port 3000
+const API=location.port==='3000'?'':'http://localhost:3000';
 async function api(path,opt={}){
-  const r=await fetch('/api/'+path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+(tok()||'')}});
+  let r;
+  try{r=await fetch(API+'/api/'+path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+(tok()||'')}})}
+  catch(e){throw new Error('Cannot reach the server. Run "node server.js" and open http://localhost:3000')}
   const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw Object.assign(new Error(d.error||'Request failed'),{status:r.status});
+  if(!r.ok) throw Object.assign(new Error(d.error||'Server not found. Run "node server.js" first.'),{status:r.status});
   return d;
 }
 

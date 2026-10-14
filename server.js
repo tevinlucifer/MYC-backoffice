@@ -7,10 +7,12 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'change-this-secret-before-going-live';
-if (process.env.VERCEL && !process.env.JWT_SECRET) throw new Error('Set the JWT_SECRET environment variable.');
+const MISSING = process.env.VERCEL ? ['JWT_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'].filter(k => !process.env[k]) : [];
 const USERS_FILE = path.join(__dirname, 'users.json');
 
 const app = express();
+// On Vercel, show a clear message instead of crashing when a setting is missing
+app.use((req, res, next) => MISSING.length ? res.status(500).send('Setup incomplete. In Vercel open Settings > Environment Variables and add: ' + MISSING.join(', ') + '. Then redeploy.') : next());
 app.use(express.json({ limit: '4mb' }));
 // Load the saved data at the start of every API request and save changes before replying (works on serverless)
 app.use('/api', async (req, res, next) => {
@@ -223,7 +225,6 @@ function emptyDB() { return { categories: [], warehouses: [], products: [], grns
 let DB = emptyDB(), snap = { users: '', db: '' };
 const sb = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY
   ? require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } }) : null;
-if (process.env.VERCEL && !sb) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_KEY.');
 async function load() {
   if (sb) {
     const { data, error } = await sb.from('kv').select('key,value').in('key', ['users', 'db']);
